@@ -1,6 +1,6 @@
 {
-  "name": "@std/http",
-  "version": "1.0.12",
+  "name": "@bread/serve-custom-404",
+  "version": "1.0.0",
   "exports": {
     ".": "./mod.ts",
     "./cookie": "./cookie.ts",
