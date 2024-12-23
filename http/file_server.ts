@@ -76,6 +76,8 @@ const HASHED_DENO_DEPLOYMENT_ID = DENO_DEPLOYMENT_ID
   ? eTag(DENO_DEPLOYMENT_ID, { weak: true })
   : undefined;
 
+let CUSTOM_NOT_FOUND = false;
+
 function modeToString(isDir: boolean, maybeMode: number | null): string {
   const modeMap = ["---", "--x", "-w-", "-wx", "r--", "r-x", "rw-", "rwx"];
 
@@ -155,6 +157,7 @@ export interface ServeFileOptions {
    * `filePath`.
    */
   fileInfo?: Deno.FileInfo;
+  notFound?: boolean;
 }
 
 /**
@@ -231,7 +234,7 @@ export async function serveFile(
     // Set content length
     headers.set(HEADER.ContentLength, `${fileSize}`);
 
-    const status = STATUS_CODE.OK;
+    const status = options?.notFound ? STATUS_CODE.NotFound : STATUS_CODE.OK;
     return new Response(null, {
       status,
       statusText: STATUS_TEXT[status],
@@ -277,7 +280,7 @@ export async function serveFile(
       headers.set(HEADER.ContentLength, `${fileSize}`);
 
       const file = await Deno.open(filePath);
-      const status = STATUS_CODE.OK;
+      const status = options?.notFound ? STATUS_CODE.NotFound : STATUS_CODE.OK;
       return new Response(file.readable, {
         status,
         statusText: STATUS_TEXT[status],
@@ -328,7 +331,8 @@ export async function serveFile(
   headers.set(HEADER.ContentLength, `${fileSize}`);
 
   const file = await Deno.open(filePath);
-  const status = STATUS_CODE.OK;
+  // This was the one
+  const status = options?.notFound ? STATUS_CODE.NotFound : STATUS_CODE.OK;
   return new Response(file.readable, {
     status,
     statusText: STATUS_TEXT[status],
@@ -654,6 +658,10 @@ export async function serveDir(
     response = await createServeDirResponse(req, opts);
   } catch (error) {
     if (!opts.quiet) logError(error as Error);
+    if (CUSTOM_NOT_FOUND) {
+      return serveFile(req, "./404.html", { notFound: true });
+    }
+
     response = error instanceof Deno.errors.NotFound
       ? createStandardResponse(STATUS_CODE.NotFound)
       : createStandardResponse(STATUS_CODE.InternalServerError);
@@ -840,6 +848,15 @@ function main() {
 
   const wild = serverArgs._ as string[];
   const target = resolve(wild[0] ?? "");
+
+  try {
+    const fileInfo = Deno.statSync("./404.html");
+    if (fileInfo) {
+      CUSTOM_NOT_FOUND = true;
+    }
+  } catch {
+    //
+  }
 
   const handler = (req: Request): Promise<Response> => {
     return serveDir(req, {
